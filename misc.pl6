@@ -90,11 +90,36 @@ sub guess-keysize(Blob $input, Int :$min=2, Int :$max=40, Int :$limit=3) {
     return @candidates;
 }
 
+sub crack-single-xor(Blob $input) {
+    my $message;
+    my $key;
+    for ^255 -> $i {
+        $key = $i;
+        $message = repeating-xor($input, Blob.new: $key);
+        last if is-ascii-alpha($message, :80cutoff);
+    }
+
+    return { 'message' => $message, 'key' => $key };
+}
+
 # TODO
 # Improve the logic
 #   Should allow trying multiple keysize guesses
 sub crack-repeating-xor(Blob $input) {
     my $keysize = guess-keysize($input, :limit(1));
-    say $keysize;
+
+    my @transposed;
+    for ^$keysize -> $i {
+        my $block = Blob.new: $input.list[$i, $i + $keysize ... *];
+        @transposed.push: $block;
+    }
+
+    my $key = Buf.new;
+    for @transposed -> $i {
+        $key.push(crack-single-xor($i)<key>);
+    }
+
+    my $message = repeating-xor($input, $key);
+    return { 'message' => $message, 'key' => $key };
 }
 
