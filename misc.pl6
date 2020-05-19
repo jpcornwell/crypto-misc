@@ -136,13 +136,62 @@ sub check-for-ecb-pattern(Blob $input) {
     return False;
 }
 
-sub add-pkcs7-padding(Buf $input) {
-    my $output = $input.clone;
+sub add-pkcs7-padding(Blob $input) {
+    my $output = Buf.new: $input.list;
 
     my $padding-length = 16 - ($output.bytes % 16);
     my $padding = Buf.new: $padding-length xx $padding-length;
 
     $output.push($padding);
-    return $output;
+    return Blob.new: $output.list;
+}
+
+sub remove-pkcs7-padding(Blob $input) {
+    my $padding-length = $input.list.tail;
+
+    return Blob.new: $input[0 ..^ (* - $padding-length)];
+}
+
+sub encrypt-aes-cbc(Blob $input, :$iv!, :$key!) {
+    my $plaintext = add-pkcs7-padding($input);
+    my $ciphertext = Buf.new;
+
+    my @blocks = $plaintext.list.rotor(16).map: { Blob.new($^block) };
+
+    for @blocks -> $block {
+        my $block-after-xor;
+
+        if $ciphertext.bytes {
+            $block-after-xor = fixed-xor($block, $ciphertext.subbuf(*-16));
+        } else {
+            $block-after-xor = fixed-xor($block, $iv);
+        }
+
+        $ciphertext.push: encrypt-aes($block-after-xor, :$key).subbuf(0, 16);
+    }
+
+    return Blob.new: $ciphertext.list;
+}
+
+sub decrypt-aes-cbc(Blob $input, :$iv!, :$key!) {
+    my @blocks = $input.list.rotor(16).map: { Blob.new($^block) };
+    my $output = Buf.new;
+
+    while @blocks.elems {
+        my $block = @blocks.pop;
+
+        my $plain = decrypt-aes(add-pkcs7-padding($block), :$key);
+
+        my $plain-after-xor;
+        if @blocks.elems {
+            $plain-after-xor = fixed-xor($plain, @blocks.tail);
+        } else {
+            $plain-after-xor = fixed-xor($plain, $iv);
+        }
+
+        $output.unshift: $plain-after-xor;
+    }
+
+    return remove-pkcs7-padding($output);
 }
 
