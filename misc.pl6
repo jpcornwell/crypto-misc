@@ -126,3 +126,13 @@ sub crack-repeating-xor(Blob $input) {
     return { 'message' => $message, 'key' => $key };
 }
 
+# Checks if the input binary data has any repeated 16 bit blocks
+sub check-for-ecb-pattern(Blob $input) {
+    my @blocks = $input.list.rotor(16).map: { Blob.new($^block) };
+    my $counts = bag @blocks;
+
+    return True if $_ > 1 for $counts.values;
+
+    return False;
+}
+
