@@ -126,7 +126,7 @@ sub crack-repeating-xor(Blob $input) {
     return { 'message' => $message, 'key' => $key };
 }
 
-# Checks if the input binary data has any repeated 16 bit blocks
+# Checks if the input binary data has any repeated 16 byte blocks
 sub check-for-ecb-pattern(Blob $input) {
     my @blocks = $input.list.rotor(16).map: { Blob.new($^block) };
     my $counts = bag @blocks;
@@ -134,5 +134,15 @@ sub check-for-ecb-pattern(Blob $input) {
     return True if $_ > 1 for $counts.values;
 
     return False;
+}
+
+sub add-pkcs7-padding(Buf $input) {
+    my $output = $input.clone;
+
+    my $padding-length = 16 - ($output.bytes % 16);
+    my $padding = Buf.new: $padding-length xx $padding-length;
+
+    $output.push($padding);
+    return $output;
 }
 
