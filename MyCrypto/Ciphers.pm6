@@ -1,7 +1,9 @@
-unit module OpenSSL::Tweaked;
+unit module MyCrypto::Ciphers;
+
+use MyCrypto::Misc;
 
 # This is just a copy of OpenSSL::CryptTools simplified and tweaked to include
-# AES-128-ECB.
+# AES-128-ECB and AES-128-CBC.
 
 sub gen-lib { $*VM.platform-library-name('ssl'.IO).Str; }
 
@@ -86,3 +88,45 @@ sub decrypt-aes(Blob $ciphertext, :$key) is export {
     return $out;
 }
 
+sub encrypt-aes-cbc(Blob $input, :$iv!, :$key!) is export {
+    my $plaintext = add-pkcs7-padding($input);
+    my $ciphertext = Buf.new;
+
+    my @blocks = $plaintext.list.rotor(16).map: { Blob.new($^block) };
+
+    for @blocks -> $block {
+        my $block-after-xor;
+
+        if $ciphertext.bytes {
+            $block-after-xor = fixed-xor($block, $ciphertext.subbuf(*-16));
+        } else {
+            $block-after-xor = fixed-xor($block, $iv);
+        }
+
+        $ciphertext.push: encrypt-aes($block-after-xor, :$key).subbuf(0, 16);
+    }
+
+    return Blob.new: $ciphertext.list;
+}
+
+sub decrypt-aes-cbc(Blob $input, :$iv!, :$key!) is export {
+    my @blocks = $input.list.rotor(16).map: { Blob.new($^block) };
+    my $output = Buf.new;
+
+    while @blocks.elems {
+        my $block = @blocks.pop;
+
+        my $plain = decrypt-aes(add-pkcs7-padding($block), :$key);
+
+        my $plain-after-xor;
+        if @blocks.elems {
+            $plain-after-xor = fixed-xor($plain, @blocks.tail);
+        } else {
+            $plain-after-xor = fixed-xor($plain, $iv);
+        }
+
+        $output.unshift: $plain-after-xor;
+    }
+
+    return remove-pkcs7-padding($output);
+}
