@@ -7,9 +7,18 @@ class BlackBox is export {
     has Blob $!key;
 
     has Str $!mode;
+    has Str @!modes;
 
-    method set() {
-        $!mode = ('ecb', 'cbc').pick;
+    multi method init() {
+        @!modes = 'ecb', 'cbc';
+    }
+
+    multi method init(:$ecb! where .so) {
+        @!modes = 'ecb';
+    }
+
+    method reset() {
+        $!mode = @!modes.pick;
 
         $!iv = '/dev/urandom'.IO.open(:bin, :ro).read(16);
         $!key = '/dev/urandom'.IO.open(:bin, :ro).read(16);
