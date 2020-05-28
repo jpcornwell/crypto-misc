@@ -56,19 +56,22 @@ sub decrypt-ecb-byte-at-a-time is export {
 
     # Decrypt secret one byte at a time
     my @message;
-    for 15 ... 0 -> $i {
-        $prefix = ('A' xx $i).join.encode;
-        my $first-block = Blob.new: $black-box.encrypt($prefix ~ $secret)[0..15];
+    my $block-count = ($ciphertext-size / $block-size) - 1;
+    for ^$block-count -> $block-n {
+        for 15 ... 0 -> $i {
+            $prefix = ('A' xx $i).join.encode;
+            my $selected-block = Blob.new: $black-box.encrypt($prefix ~ $secret).list.rotor($block-size)[$block-n];
 
-        my %hash;
-        for 0..255 -> $j {
-            my $prefix-b = Blob.new: flat(($prefix ~ $secret).list[0..14], $j);
-            my $first-block = Blob.new: $black-box.encrypt($prefix-b ~ $secret)[0..15];
-            %hash{$j} = $first-block;
+            my %hash;
+            for 0..255 -> $j {
+                my $prefix-b = Blob.new: flat(($prefix ~ $secret).list.rotor($block-size)[$block-n][0..^15], $j);
+                my $selected-block = Blob.new: $black-box.encrypt($prefix-b ~ $secret).list.rotor($block-size)[0];
+                %hash{$j} = $selected-block;
+            }
+
+            my $char-val = %hash.pairs.grep(*.value.list eqv $selected-block.list)[0].key.Int;
+            @message.push($char-val);
         }
-
-        my $foo = %hash.pairs.grep: *.value.list eqv $first-block.list;
-        @message.push($foo[0].key.Int);
     }
 
     say Blob.new(@message).decode;
