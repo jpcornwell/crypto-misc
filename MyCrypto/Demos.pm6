@@ -81,3 +81,69 @@ sub decrypt-ecb-byte-at-a-time is export {
     say Blob.new(@message).decode;
 }
 
+# Demonstrates ECB "cut and paste"
+sub ecb-cut-and-paste is export {
+    my $black-box = BlackBox.new;
+    $black-box.init(:ecb);
+    $black-box.reset;
+
+    class Cookie {
+        has Str $.email;
+        has Int $.uid;
+        has Str $.role;
+
+        method tokenize {
+            return "email=$!email&uid=$!uid&role=$!role";
+        }
+    }
+
+    sub parse-token(Str $token) {
+        my $email = '';
+        my $uid = -1;
+        my $role = '';
+
+        my @params = $token.split('&');
+
+        for @params -> $param {
+            my ($key, $val) = $param.split('=');
+            $email = $val if $key eq 'email';
+            $uid = $val.Int if $key eq 'uid';
+            $role = $val if $key eq 'role';
+        }
+
+        die 'Invalid email' if $email eq '';
+        die 'invalid uid' if $uid == -1;
+        die 'invalid role' if $role eq '';
+
+        return Cookie.new: :$email, :$uid, :$role;
+    }
+
+    sub profile-for(Str $email) {
+        my $cookie = Cookie.new: :$email, uid => 10, role => 'user';
+        my $encrypted-token = $black-box.encrypt($cookie.tokenize.encode);
+        return $encrypted-token;
+    }
+
+    sub check-token-for-admin(Blob $encrypted-token) {
+        my $token = $black-box.decrypt($encrypted-token).decode;
+        say "Checking token: $token";
+        my $cookie = parse-token($token);
+        return True if $cookie.role eq 'admin';
+        return False;
+    }
+
+    my $payload = "ZZZZZZZZZZadmin\c[11]\c[11]\c[11]\c[11]\c[11]\c[11]\c[11]\c[11]\c[11]\c[11]\c[11]";
+    my $special-token = profile-for($payload);
+    my @admin-byte-vals = $special-token.list.rotor(16)[1];
+
+    my $attacker-token = profile-for('attacker_foobarbar@domain.com');
+    my $result = check-token-for-admin($attacker-token);
+    $result == False or die 'Unmodified token should not have admin role';
+
+    my @token-start-vals = $attacker-token.list.rotor(16)[^3].flat;
+    my $modified-attacker-token = Blob.new: flat(@token-start-vals, @admin-byte-vals);
+
+    $result = check-token-for-admin($modified-attacker-token);
+    $result == True or die 'Modified token should have admin role';
+}
+
