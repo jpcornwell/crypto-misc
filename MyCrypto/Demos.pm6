@@ -56,7 +56,8 @@ sub decrypt-ecb-byte-at-a-time is export {
 
     # Decrypt secret one byte at a time
     my @message;
-    my $block-count = ($ciphertext-size / $block-size) - 1;
+    my $block-count = $ciphertext-size / $block-size;
+    LOOP:
     for ^$block-count -> $block-n {
         for 15 ... 0 -> $i {
             $prefix = ('A' xx $i).join.encode;
@@ -64,7 +65,10 @@ sub decrypt-ecb-byte-at-a-time is export {
 
             my %hash;
             for 0..255 -> $j {
-                my $prefix-b = Blob.new: flat(($prefix ~ $secret).list.rotor($block-size)[$block-n][0..^15], $j);
+                my @prefix-byte-vals = ($prefix ~ $secret).list.rotor($block-size, :partial)[$block-n];
+                last LOOP if @prefix-byte-vals.elems != $block-size; # Reached the end of the message
+
+                my $prefix-b = Blob.new: flat(@prefix-byte-vals[^($block-size-1)], $j);
                 my $selected-block = Blob.new: $black-box.encrypt($prefix-b ~ $secret).list.rotor($block-size)[0];
                 %hash{$j} = $selected-block;
             }
