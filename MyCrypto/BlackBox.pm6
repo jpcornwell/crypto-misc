@@ -17,6 +17,10 @@ class BlackBox is export {
         @!modes = 'ecb';
     }
 
+    multi method init(:$cbc! where .so) {
+        @!modes = 'cbc';
+    }
+
     method reset() {
         $!mode = @!modes.pick;
 

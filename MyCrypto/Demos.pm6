@@ -229,3 +229,36 @@ sub ecb-cut-and-paste is export {
     $result == True or die 'Modified token should have admin role';
 }
 
+# Demonstrates how to do a CBC bitflipping attack
+sub cbc-bit-flip is export {
+    my $black-box = BlackBox.new;
+    $black-box.init(:cbc);
+    $black-box.reset;
+
+    sub create-token(Str $input) {
+        my $prefix = 'comment1=cooking MCs;userdata='.encode;
+        my $suffix = ';comment2= like a pound of bacon'.encode;
+
+        return $black-box.encrypt($prefix ~ $input.encode ~ $suffix);
+    }
+
+    sub is-token-admin(Blob $input) {
+        my $token = $black-box.decrypt($input).decode('utf8-c8');
+
+        return True if $token.contains(';admin=true;');
+
+        return False;
+    }
+
+    my $encrypted-token = create-token('yyaaaaaaaaaaaaaaaaXXXXXXXXXXXXXXXX');
+    is-token-admin($encrypted-token) == False or die 'Unmodified token should not be admin';
+
+    # Modify 3rd block (which will bit flip the 4th block)
+    my $desired-payload = ';admin=true;;;;;'.encode;
+    my @blocks = $encrypted-token.list.rotor(16);
+    my $foo = fixed-xor('XXXXXXXXXXXXXXXX'.encode, $desired-payload);
+    @blocks[2] = fixed-xor(Buf.new(@blocks[2]), $foo).list;
+    my $modified-token = Blob.new: @blocks.join(' ').split(' ')>>.Int;
+
+    is-token-admin($modified-token) == True or die 'Modified token should be admin';
+}
