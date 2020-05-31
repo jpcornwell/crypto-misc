@@ -82,7 +82,9 @@ sub decrypt-ecb-byte-at-a-time is export {
 }
 
 # Same as before but harder because the controlled part of the plaintext is no
-# longer at the beginning. This code could definitely be cleaned up some.
+# longer at the beginning. This code could definitely be cleaned up some. Also
+# this assumes the non-user-controlled prefix is random (doesn't contain ECB
+# block repeats).
 sub decrypt-ecb-byte-at-a-time-harder is export {
     my $black-box = BlackBox.new;
     $black-box.init(:ecb);
