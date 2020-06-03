@@ -2,6 +2,7 @@ unit module MyCrypto::Demos;
 
 use MyCrypto::BlackBox;
 use MyCrypto::Misc;
+use MyCrypto::RNG;
 
 # Demonstrates how one can determine if a given encryption is in ECB mode
 sub determine-ecb is export {
@@ -261,4 +262,29 @@ sub cbc-bit-flip is export {
     my $modified-token = Blob.new: @blocks.join(' ').split(' ')>>.Int;
 
     is-token-admin($modified-token) == True or die 'Modified token should be admin';
+}
+
+# Demonstrates cracking an RNG seed based on Unix timestamp
+sub crack-mt19937-seed is export {
+    my $wait-time = (40..1000).pick;
+    sleep $wait-time;
+    my $seed = DateTime.new(now).posix;
+    seed-mt($seed);
+    my $output = extract-number;
+    say "Random number generated: $output";
+    $wait-time = (40..1000).pick;
+    sleep $wait-time;
+
+    my $current = DateTime.new(now).posix;
+    my $begin-try = $current - 2000;
+
+    for $begin-try .. $current -> $i {
+        seed-mt($i);
+        if extract-number() == $output {
+            my $guessed-seed = $i;
+            $guessed-seed == $seed or die 'Incorrect guessed seed';
+            say "Seed value is $guessed-seed";
+            last;
+        }
+    }
 }
