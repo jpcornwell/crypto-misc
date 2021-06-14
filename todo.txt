@@ -1,3 +1,14 @@
 
 add corpus module
+add GUI to more easily use these scripts for tinkering
+  have a tab of common ciphers (like Caesar cipher)
+  have a tab that tries to guess the cipher automatically
+    detect ECB pattern
+    detect trivial ciphers (like Caesar cipher)
+  have a tab that tries to crack ciphers
+    add interactivity (ex:auto guess keysize, but provide slider to adjust)
+  have a tab that allows modifying message
+    ex: ECB cut and paste
+  need a way to execute encryption/decryption functions
+    for example, ECB byte-at-a-time decryption requires this
 
