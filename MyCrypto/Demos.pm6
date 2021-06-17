@@ -1,6 +1,7 @@
 unit module MyCrypto::Demos;
 
 use MyCrypto::BlackBox;
+use MyCrypto::Ciphers;
 use MyCrypto::Misc;
 use MyCrypto::RNG;
 
@@ -262,6 +263,32 @@ sub cbc-bit-flip is export {
     my $modified-token = Blob.new: @blocks.join(' ').split(' ')>>.Int;
 
     is-token-admin($modified-token) == True or die 'Modified token should be admin';
+}
+
+# Demonstrates exploit using CBC padding oracle
+sub cbc-padding-oracle-exploit is export {
+    my $key = rand-blob(16);
+    my $iv = rand-blob(16);
+
+    sub get-ciphertext-blob {
+        my $plaintext-blob = add-pkcs7-padding(base64-to-buf('MDAwMDAwTm93IHRoYXQgdGhlIHBhcnR5IGlzIGp1bXBpbmc='));
+
+        return encrypt-aes-cbc($plaintext-blob, :$iv, :$key);
+    }
+
+    # Returns True if padding is valid, False otherwise
+    sub padding-oracle($ciphertext-blob) {
+        try {
+            decrypt-aes-cbc($ciphertext-blob, :$iv, :$key);
+            return True;
+        }
+        return False;
+    }
+
+    my $foo = get-ciphertext-blob();
+    say padding-oracle($foo);
+    my $bar = 'yellow submarine'.encode;
+    say padding-oracle($bar);
 }
 
 # Demonstrates cracking an RNG seed based on Unix timestamp

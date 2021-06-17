@@ -110,6 +110,8 @@ sub encrypt-aes-cbc(Blob $input, :$iv!, :$key!) is export {
 }
 
 sub decrypt-aes-cbc(Blob $input, :$iv!, :$key!) is export {
+    die '$input must be multiple of 16 bytes' if $input.bytes !%% 16;
+
     my @blocks = $input.list.rotor(16).map: { Blob.new($^block) };
     my $output = Buf.new;
 

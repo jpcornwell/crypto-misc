@@ -2,6 +2,10 @@ unit module MyCrypto::Misc;
 
 use MIME::Base64;
 
+sub rand-blob(Int $size) is export {
+    return '/dev/urandom'.IO.open(:bin, :ro).read($size);
+}
+
 sub hex-to-buf(Str $input) is export {
     return Buf.new: $input.comb.rotor(2)>>.join>>.parse-base(16);
 }
@@ -85,7 +89,8 @@ sub add-pkcs7-padding(Blob $input) is export {
 sub remove-pkcs7-padding(Blob $input) is export {
     my $padding-length = $input.list.tail;
 
-    my @padding-vals = $input.list[(* - $padding-length) .. *];
+    my $input-length = $input.list.elems;
+    my @padding-vals = $input.list[max($input-length - $padding-length, 0) .. *];
 
     for @padding-vals -> $val {
         die 'Invalid padding' if $val != $padding-length;
