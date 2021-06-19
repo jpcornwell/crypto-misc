@@ -132,3 +132,24 @@ sub decrypt-aes-cbc(Blob $input, :$iv!, :$key!) is export {
 
     return remove-pkcs7-padding($output);
 }
+
+sub apply-aes-ctr(Blob $input, :$nonce!, :$key!) is export {
+    my $counter = 0;
+    my $keystream = Buf.new;
+
+    # Generate enough keystream to accomodate the input
+    for ^ceiling($input.bytes / 16) {
+        my $aes-input = Buf.new;
+        $aes-input.write-uint64(0, $nonce, LittleEndian);
+        $aes-input.write-uint64(8, $counter, LittleEndian);
+
+        # Only take the first block of the encrypted output, the rest is padding
+        $keystream.append: encrypt-aes($aes-input, :$key)[0..15];
+        $counter++;
+    }
+
+    # Cut off extra keystream so it's length matches the input
+    $keystream = Buf.new: $keystream[0 .. ($input.bytes - 1)];
+    return fixed-xor($input, $keystream);
+}
+
