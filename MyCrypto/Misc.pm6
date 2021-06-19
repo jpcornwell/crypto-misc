@@ -88,6 +88,7 @@ sub add-pkcs7-padding(Blob $input) is export {
 
 sub remove-pkcs7-padding(Blob $input) is export {
     my $padding-length = $input.list.tail;
+    die 'Invalid padding' if $padding-length == 0;
 
     my $input-length = $input.list.elems;
     my @padding-vals = $input.list[max($input-length - $padding-length, 0) .. *];

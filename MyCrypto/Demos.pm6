@@ -271,7 +271,19 @@ sub cbc-padding-oracle-exploit is export {
     my $iv = rand-blob(16);
 
     sub get-ciphertext-blob {
-        my $plaintext-blob = add-pkcs7-padding(base64-to-buf('MDAwMDAwTm93IHRoYXQgdGhlIHBhcnR5IGlzIGp1bXBpbmc='));
+        my $message = q:to/END/.split("\n").pick;
+            MDAwMDAwTm93IHRoYXQgdGhlIHBhcnR5IGlzIGp1bXBpbmc=
+            MDAwMDAxV2l0aCB0aGUgYmFzcyBraWNrZWQgaW4gYW5kIHRoZSBWZWdhJ3MgYXJlIHB1bXBpbic=
+            MDAwMDAyUXVpY2sgdG8gdGhlIHBvaW50LCB0byB0aGUgcG9pbnQsIG5vIGZha2luZw==
+            MDAwMDAzQ29va2luZyBNQydzIGxpa2UgYSBwb3VuZCBvZiBiYWNvbg==
+            MDAwMDA0QnVybmluZyAnZW0sIGlmIHlvdSBhaW4ndCBxdWljayBhbmQgbmltYmxl
+            MDAwMDA1SSBnbyBjcmF6eSB3aGVuIEkgaGVhciBhIGN5bWJhbA==
+            MDAwMDA2QW5kIGEgaGlnaCBoYXQgd2l0aCBhIHNvdXBlZCB1cCB0ZW1wbw==
+            MDAwMDA3SSdtIG9uIGEgcm9sbCwgaXQncyB0aW1lIHRvIGdvIHNvbG8=
+            MDAwMDA4b2xsaW4nIGluIG15IGZpdmUgcG9pbnQgb2g=
+            MDAwMDA5aXRoIG15IHJhZy10b3AgZG93biBzbyBteSBoYWlyIGNhbiBibG93
+        END
+        my $plaintext-blob = base64-to-buf($message);
 
         return encrypt-aes-cbc($plaintext-blob, :$iv, :$key);
     }
@@ -285,10 +297,65 @@ sub cbc-padding-oracle-exploit is export {
         return False;
     }
 
-    my $foo = get-ciphertext-blob();
-    say padding-oracle($foo);
-    my $bar = 'yellow submarine'.encode;
-    say padding-oracle($bar);
+    my $cipher-blob = get-ciphertext-blob();
+    my $temp-buf = Buf.new: $cipher-blob.list;
+    my $plain-buf = Buf.new;
+
+    my $block-count = $temp-buf.bytes / 16;
+    # Start at the last block and work towards the beginning (ignoring the first block)
+    for ($block-count - 1) ... 1 -> $current-block {
+        my $current-block-index = $current-block * 16;
+        my $previous-block-index = $current-block-index - 16;
+
+        # Make temp copy of previous block (because we will be editing it to bit flip current block)
+        my $block-copy = Buf.new: $temp-buf[$previous-block-index .. $previous-block-index + 15];
+
+        # For some reason subbuf is timing out and killing the program
+        # my $block-copy = $temp-buf.subbuf($previous-block-index, 16);
+        
+        # Go byte by byte starting at the end
+        for 15 ... 0 -> $byte-offset {
+            # Figure out padding value to use
+            my $padding-val = 16 - $byte-offset;
+            
+            # Try to break any padding that already exists. (Success is not guaranteed, but most likely will work.)
+            # This is only necessary when determining the last byte. After that, we control the last byte,
+            #     which subsequently controls the padding value.
+            if $byte-offset == 15 {
+		$temp-buf[$previous-block-index + 14] +^= 2;
+            }
+            
+            # Adjust bytes that come after byte offset to padding value
+            for ($byte-offset + 1) .. 15 -> $second-byte-offset {
+                $temp-buf[$previous-block-index + $second-byte-offset] +^= $plain-buf[$current-block-index + $second-byte-offset] +^ $padding-val;
+            }
+            
+            # Loop through bit flipping the byte offset until padding-oracle returns True
+            my $temp-val = 0;
+            loop {
+                $temp-buf[$previous-block-index + $byte-offset] = $temp-val;
+                last if padding-oracle($temp-buf);
+                $temp-val++;
+                die 'Infinite loop' if $temp-val > 255;
+            }
+            
+            # Determine actual value of byte-offset and set in plain-buf
+            $plain-buf[$current-block-index + $byte-offset] = $temp-val +^ $padding-val +^ $block-copy[$byte-offset];
+
+            # Restore the previous block value using the block copy made earlier
+            $temp-buf[$previous-block-index .. ($previous-block-index + 15)] = $block-copy.list;
+        }
+
+        # Cut off the last block
+        $temp-buf = Buf.new: $temp-buf[0 .. ($current-block-index - 1)];
+    }
+
+    # Remove first block which we are not able to crack
+    $plain-buf = Buf.new: $plain-buf[16 .. *];
+    
+    my $message = remove-pkcs7-padding($plain-buf).decode;
+    say "Plain buf: $plain-buf.list()";
+    say "Message: $message";
 }
 
 # Demonstrates cracking an RNG seed based on Unix timestamp
