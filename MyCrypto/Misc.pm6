@@ -41,6 +41,15 @@ sub is-ascii-alpha(Blob $input, :$cutoff=95) is export {
     return False;
 }
 
+sub ascii-alpha-score(Blob $input) is export {
+    my $alpha-count = $input.list.grep(* (elem) flat(32, 65..90, 97..122)).elems;
+    my $total = $input.elems;
+
+    my $percent = ($alpha-count/$total) * 100;
+
+    return $percent;
+}
+
 sub repeating-xor(Blob $input, Blob $key) is export {
     my $output = Buf.new: $input;
     my $ints-from-key = flat($key.list xx *);

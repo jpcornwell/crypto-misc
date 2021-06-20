@@ -33,11 +33,8 @@ sub guess-keysize(Blob $input, Int :$min=2, Int :$max=40, Int :$limit=3) is expo
 sub crack-single-xor(Blob $input) is export {
     my $message;
     my $key;
-    for ^255 -> $i {
-        $key = $i;
-        $message = repeating-xor($input, Blob.new: $key);
-        last if is-ascii-alpha($message, :80cutoff);
-    }
+
+    $key = max(^256, :by({ ascii-alpha-score(repeating-xor($input, Blob.new: $_)) }));
 
     return { 'message' => $message, 'key' => $key };
 }

@@ -2,6 +2,7 @@ unit module MyCrypto::Demos;
 
 use MyCrypto::BlackBox;
 use MyCrypto::Ciphers;
+use MyCrypto::Cracks;
 use MyCrypto::Misc;
 use MyCrypto::RNG;
 
@@ -339,7 +340,7 @@ sub cbc-padding-oracle-exploit is export {
                 die 'Infinite loop' if $temp-val > 255;
             }
             
-            # Determine actual value of byte-offset and set in plain-buf
+            # Determine actual value at byte-offset and set in plain-buf
             $plain-buf[$current-block-index + $byte-offset] = $temp-val +^ $padding-val +^ $block-copy[$byte-offset];
 
             # Restore the previous block value using the block copy made earlier
@@ -356,6 +357,30 @@ sub cbc-padding-oracle-exploit is export {
     my $message = remove-pkcs7-padding($plain-buf).decode;
     say "Plain buf: $plain-buf.list()";
     say "Message: $message";
+}
+
+sub break-fixed-nonce-ctr is export {
+    my $nonce = 0;
+    my $key = 'YELLOW SUBMARINE'.encode;
+    my $keystream = Buf.new;
+
+    my @plain-blobs = 'MyCrypto/data/plaintext-data-base64.txt'.IO.lines>>.&base64-to-buf;
+    my @cipher-blobs = @plain-blobs>>.&apply-aes-ctr(:$nonce, :$key);
+
+    my $min-length = min(@cipher-blobs>>.bytes);
+    @cipher-blobs .= map: *.subbuf(^$min-length);
+
+    for ^$min-length -> $index {
+        my $section = Buf.new: @cipher-blobs>>[$index];
+        $keystream.append: crack-single-xor($section)<key>;
+    }
+
+    my @cracked-blobs = @cipher-blobs>>.&fixed-xor($keystream);
+    .say for @cracked-blobs>>.decode;
+
+    say "\n-------------------------------------------------------\n";
+
+    .say for @plain-blobs>>.decode;
 }
 
 # Demonstrates cracking an RNG seed based on Unix timestamp
