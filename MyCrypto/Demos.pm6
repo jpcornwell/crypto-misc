@@ -385,21 +385,22 @@ sub break-fixed-nonce-ctr is export {
 
 # Demonstrates cracking an RNG seed based on Unix timestamp
 sub crack-mt19937-seed is export {
-    my $wait-time = (40..1000).pick;
+    my $wait-time = (40..100).pick;
     sleep $wait-time;
     my $seed = DateTime.new(now).posix;
-    seed-mt($seed);
-    my $output = extract-number;
+    my $mt = MtGenerator.new;
+    $mt.seed($seed);
+    my $output = $mt.extract-number;
     say "Random number generated: $output";
-    $wait-time = (40..1000).pick;
+    $wait-time = (40..100).pick;
     sleep $wait-time;
 
     my $current = DateTime.new(now).posix;
     my $begin-try = $current - 2000;
 
     for $begin-try .. $current -> $i {
-        seed-mt($i);
-        if extract-number() == $output {
+        $mt.seed($i);
+        if $mt.extract-number() == $output {
             my $guessed-seed = $i;
             $guessed-seed == $seed or die 'Incorrect guessed seed';
             say "Seed value is $guessed-seed";
@@ -407,3 +408,19 @@ sub crack-mt19937-seed is export {
         }
     }
 }
+
+# Demonstrate cloning an RNG output sequence by recreating its internal state
+sub clone-mt19937 is export {
+    my $mt = MtGenerator.new;
+    $mt.seed: 42;
+
+    my @recreated-state;
+    @recreated-state.push: mt-untemper $mt.extract-number for ^624;
+
+    my $cloned-mt = MtGenerator.new;
+    $cloned-mt.set-state: @recreated-state;
+
+    die 'Cloned output is not the same!' if $mt.extract-number != $cloned-mt.extract-number for ^10_000;
+    say 'Success!';
+}
+
