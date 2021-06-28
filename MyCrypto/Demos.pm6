@@ -424,3 +424,23 @@ sub clone-mt19937 is export {
     say 'Success!';
 }
 
+# Demonstrate attack on 'random access read/write' AES CTR
+sub attack-rand-access-aes-ctr is export {
+    my $plain-blob = 'MyCrypto/data/plaintext-data-base64.txt'.IO.lines[0].&base64-to-buf;
+
+    my $nonce = 0;
+    my $key = rand-blob 16;
+
+    my $cipher-blob = apply-aes-ctr($plain-blob, :$nonce, :$key);
+    
+    # By overwriting the entire message with 'zero bits' we can get back the keystream
+    my $keystream = edit-aes-ctr($cipher-blob, 0, Buf.new(0 xx $cipher-blob.bytes), :$nonce, :$key);
+
+    my $derived-plain-blob = fixed-xor($cipher-blob, $keystream);
+    say 'Plain:   ', $plain-blob.decode;
+    say 'Derived: ', $derived-plain-blob.decode;
+    die 'Unable to derive original plaintext' if $plain-blob.decode ne $derived-plain-blob.decode;
+
+    say 'Success!';
+}
+

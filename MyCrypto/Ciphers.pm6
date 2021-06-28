@@ -153,3 +153,29 @@ sub apply-aes-ctr(Blob $input, :$nonce!, :$key!) is export {
     return fixed-xor($input, $keystream);
 }
 
+# Edit given ciphertext without decrypting and then re-encrypting the entire thing
+sub edit-aes-ctr(Blob $cipher-blob, Int $offset, Blob $plain-blob, :$nonce!, :$key!) is export {
+    my $counter = 0;
+    my $keystream = Buf.new;
+
+    # Generate enough keystream to accomodate the plaintext adjusted to given offset
+    for ^ceiling(($plain-blob.bytes + $offset) / 16) {
+        my $aes-input = Buf.new;
+        $aes-input.write-uint64(0, $nonce, LittleEndian);
+        $aes-input.write-uint64(8, $counter, LittleEndian);
+
+        # Only take the first block of the encrypted output, the rest is padding
+        $keystream.append: encrypt-aes($aes-input, :$key)[0..15];
+        $counter++;
+    }
+
+    # Shift and adjust keystream to match the placement of the plaintext
+    $keystream = Buf.new: $keystream[$offset ..^ ($offset + $plain-blob.bytes)];
+
+    # Apply keystream and overwrite corresponding original ciphertext
+    my $edited-cipher-blob = fixed-xor($plain-blob, $keystream);
+    my $new-cipher-blob = Buf.new: $cipher-blob.list;
+    $new-cipher-blob.subbuf-rw($offset, $edited-cipher-blob.bytes) = $edited-cipher-blob;
+    return $new-cipher-blob;
+}
+
